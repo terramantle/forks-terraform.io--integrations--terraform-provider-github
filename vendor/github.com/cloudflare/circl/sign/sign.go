@@ -2,7 +2,7 @@
 //
 // A register of schemes is available in the package
 //
-//  github.com/cloudflare/circl/sign/schemes
+//	github.com/cloudflare/circl/sign/schemes
 package sign
 
 import (
@@ -31,12 +31,17 @@ type PublicKey interface {
 type PrivateKey interface {
 	// Returns the signature scheme for this private key.
 	Scheme() Scheme
-
 	Equal(crypto.PrivateKey) bool
 	// For compatibility with Go standard library
 	crypto.Signer
 	crypto.PrivateKey
 	encoding.BinaryMarshaler
+}
+
+// A private key that retains the seed with which it was generated.
+type Seeded interface {
+	// returns the seed if retained, otherwise nil
+	Seed() []byte
 }
 
 // A Scheme represents a specific instance of a signature scheme.
@@ -108,4 +113,7 @@ var (
 	// ErrContextNotSupported is the error used if a context is not
 	// supported.
 	ErrContextNotSupported = errors.New("context not supported")
+
+	// ErrContextTooLong is the error used if the context string is too long.
+	ErrContextTooLong = errors.New("context string too long")
 )
