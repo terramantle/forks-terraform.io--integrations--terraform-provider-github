@@ -18,8 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"cloud.google.com/go/internal/trace"
 )
 
 // CopierFrom creates a Copier that can copy src to dst.
@@ -69,12 +67,21 @@ type Copier struct {
 	DestinationKMSKeyName string
 
 	dst, src *ObjectHandle
+
+	// The maximum number of bytes that will be rewritten per rewrite request.
+	// Most callers shouldn't need to specify this parameter - it is primarily
+	// in place to support testing. If specified the value must be an integral
+	// multiple of 1 MiB (1048576). Also, this only applies to requests where
+	// the source and destination span locations and/or storage classes. Finally,
+	// this value must not change across rewrite calls else you'll get an error
+	// that the `rewriteToken` is invalid.
+	maxBytesRewrittenPerCall int64
 }
 
 // Run performs the copy.
 func (c *Copier) Run(ctx context.Context) (attrs *ObjectAttrs, err error) {
-	ctx = trace.StartSpan(ctx, "cloud.google.com/go/storage.Copier.Run")
-	defer func() { trace.EndSpan(ctx, err) }()
+	ctx, _ = startSpan(ctx, "Copier.Run")
+	defer func() { endSpan(ctx, err) }()
 
 	if err := c.src.validate(); err != nil {
 		return nil, err
@@ -108,8 +115,9 @@ func (c *Copier) Run(ctx context.Context) (attrs *ObjectAttrs, err error) {
 			encryptionKey: c.dst.encryptionKey,
 			keyName:       c.DestinationKMSKeyName,
 		},
-		predefinedACL: c.PredefinedACL,
-		token:         c.RewriteToken,
+		predefinedACL:            c.PredefinedACL,
+		token:                    c.RewriteToken,
+		maxBytesRewrittenPerCall: c.maxBytesRewrittenPerCall,
 	}
 
 	isIdempotent := c.dst.conds != nil && (c.dst.conds.GenerationMatch != 0 || c.dst.conds.DoesNotExist)
@@ -127,6 +135,7 @@ func (c *Copier) Run(ctx context.Context) (attrs *ObjectAttrs, err error) {
 			return nil, err
 		}
 		c.RewriteToken = res.token
+		req.token = res.token
 		if c.ProgressFunc != nil {
 			c.ProgressFunc(uint64(res.written), uint64(res.size))
 		}
@@ -169,8 +178,8 @@ type Composer struct {
 
 // Run performs the compose operation.
 func (c *Composer) Run(ctx context.Context) (attrs *ObjectAttrs, err error) {
-	ctx = trace.StartSpan(ctx, "cloud.google.com/go/storage.Composer.Run")
-	defer func() { trace.EndSpan(ctx, err) }()
+	ctx, _ = startSpan(ctx, "Composer.Run")
+	defer func() { endSpan(ctx, err) }()
 
 	if err := c.dst.validate(); err != nil {
 		return nil, err
